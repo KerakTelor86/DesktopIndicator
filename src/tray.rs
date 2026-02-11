@@ -5,7 +5,7 @@ use trayicon::{MenuBuilder, TrayIcon, TrayIconBuilder};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::window::{Window, WindowId};
+use winit::window::WindowId;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 enum Event {
@@ -16,7 +16,6 @@ enum Event {
 }
 
 pub struct TrayApp {
-    window: Option<Window>,
     tray_icon: TrayIcon<Event>,
     icon_selector: IconSelector,
     desktop_event_hooks: DesktopEventHooks,
@@ -40,7 +39,6 @@ impl TrayApp {
             .unwrap();
 
         let mut app = TrayApp {
-            window: None,
             tray_icon,
             icon_selector: IconSelector::new(desktop_event_hooks.clone()),
             desktop_event_hooks: desktop_event_hooks.clone(),
@@ -60,18 +58,12 @@ impl TrayApp {
 }
 
 impl ApplicationHandler<Event> for TrayApp {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.window = Some(
-            event_loop
-                .create_window(Window::default_attributes())
-                .unwrap(),
-        );
-    }
+    fn resumed(&mut self, _event_loop: &ActiveEventLoop) {}
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: Event) {
         match event {
             Event::ActiveDesktopChanged(info) => {
-                if let Some(icon) = self.icon_selector.get_by_name(info.name) {
+                if let Some(icon) = self.icon_selector.get_by_name(&info.name) {
                     self.tray_icon.set_icon(icon.as_ref()).unwrap();
                 } else if let Some(icon) = self.icon_selector.get_by_index(info.index) {
                     self.tray_icon.set_icon(icon.as_ref()).unwrap();
@@ -102,8 +94,8 @@ impl ApplicationHandler<Event> for TrayApp {
     ) {
         match event {
             WindowEvent::CloseRequested => {
-                event_loop.exit();
                 self.desktop_event_hooks.terminate();
+                event_loop.exit();
             }
             _ => {}
         }

@@ -37,8 +37,8 @@ impl IconSelector {
         }
     }
 
-    pub fn get_by_name(&self, name: String) -> Option<Arc<Icon>> {
-        if let Some(index) = self.name_to_index.lock().unwrap().get(&name) {
+    pub fn get_by_name(&self, name: &str) -> Option<Arc<Icon>> {
+        if let Some(index) = self.name_to_index.lock().unwrap().get(name) {
             self.get_by_index(index.clone())
         } else {
             None
