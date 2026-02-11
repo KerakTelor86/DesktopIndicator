@@ -6,4 +6,3 @@ edition = "2024"
 [dependencies]
 tray-icon = "0.21.3"
 winvd = "0.0.48"
-windows = { version = "0.62.2", features = ["Win32", "Win32_Foundation"] }
