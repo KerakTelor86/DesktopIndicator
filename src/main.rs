@@ -1,5 +1,10 @@
-use winvd::get_desktop_count;
+use crate::desktop::DesktopEventHooks;
+use crate::tray::TrayApp;
+
+mod desktop;
+mod icon;
+mod tray;
 
 fn main() {
-    println!("Desktops: {:?}", get_desktop_count().unwrap());
+    TrayApp::start(DesktopEventHooks::new());
 }
