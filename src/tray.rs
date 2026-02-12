@@ -2,7 +2,7 @@ use crate::config::Settings;
 use crate::desktop::{DesktopEventHooks, DesktopInfo};
 use crate::guard_clause;
 use crate::icon::IconSelector;
-use std::thread;
+use std::{process, thread};
 use trayicon::{Error, MenuBuilder, TrayIcon, TrayIconBuilder};
 use winit::application::ApplicationHandler;
 use winit::error::EventLoopError;
@@ -14,7 +14,6 @@ use winit::window::WindowId;
 enum Event {
     ActiveDesktopChanged(DesktopInfo),
     LeftClick,
-    DoubleClick,
     Exit,
 }
 
@@ -59,7 +58,6 @@ impl TrayApp {
                 .icon(default_icon.as_ref().clone())
                 .tooltip("DesktopIndicator")
                 .on_click(Event::LeftClick)
-                .on_double_click(Event::DoubleClick)
                 .menu(MenuBuilder::new().item("Exit", Event::Exit))
                 .build(),
             error,
@@ -114,10 +112,13 @@ impl ApplicationHandler<Event> for TrayApp {
                 }
             }
             Event::LeftClick => {
-                todo!();
-            }
-            Event::DoubleClick => {
-                todo!();
+                // https://stackoverflow.com/a/79009385/10661599
+                if let Err(error) = process::Command::new("explorer")
+                    .arg("shell:::{3080F90E-D7AD-11D9-BD98-0000947B0257}")
+                    .spawn()
+                {
+                    log::error!("Could not open task view: {}", error);
+                };
             }
             Event::Exit => {
                 self.desktop_event_hooks.terminate();
