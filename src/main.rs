@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use crate::config::Settings;
 use crate::desktop::DesktopEventHooks;
 use crate::tray::TrayApp;
