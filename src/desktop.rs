@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::{sync, thread};
 use winvd::{
     get_current_desktop, get_desktops, listen_desktop_events, Desktop, DesktopEvent as WinVdEvent,
-    Error,
+    DesktopEventThread, Error,
 };
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -26,6 +26,7 @@ const BUS_BUFFER_SIZE: usize = 32;
 
 #[derive(Clone)]
 pub struct DesktopEventHooks {
+    _listener_thread: Arc<DesktopEventThread>,
     on_active_change_hook: Arc<Mutex<Bus<Option<DesktopInfo>>>>,
     on_desktops_change_hook: Arc<Mutex<Bus<Option<Vec<DesktopInfo>>>>>,
 }
@@ -33,7 +34,7 @@ pub struct DesktopEventHooks {
 impl DesktopEventHooks {
     pub fn new() -> Result<Self, Error> {
         let (tx, rx) = sync::mpsc::channel::<WinVdEvent>();
-        listen_desktop_events(tx)?;
+        let listener_thread = listen_desktop_events(tx)?;
 
         let on_active_change_hook = Arc::new(Mutex::new(Bus::new(BUS_BUFFER_SIZE)));
         let on_desktops_change_hook = Arc::new(Mutex::new(Bus::new(BUS_BUFFER_SIZE)));
@@ -44,6 +45,7 @@ impl DesktopEventHooks {
 
             thread::spawn(move || {
                 for event in rx {
+                    log::info!("Event received: {:?}", event);
                     let current_desktop = guard_clause!(get_current_desktop(), error, {
                         log::error!("Could not get current desktop: {:?}", error);
                         continue;
@@ -57,7 +59,7 @@ impl DesktopEventHooks {
                         WinVdEvent::DesktopMoved { .. } => true,
                         _ => false,
                     } {
-                        let Ok(mut locked_hook) = on_active_change_hook.lock() else {
+                        let Ok(mut locked_hook) = on_active_change_hook.try_lock() else {
                             log::error!("Could not lock the active desktop change hook");
                             continue;
                         };
@@ -71,7 +73,7 @@ impl DesktopEventHooks {
                         WinVdEvent::DesktopMoved { .. } => true,
                         _ => false,
                     } {
-                        let Ok(mut locked_hook) = on_desktops_change_hook_clone.lock() else {
+                        let Ok(mut locked_hook) = on_desktops_change_hook_clone.try_lock() else {
                             log::error!("Could not lock the desktop change hook");
                             continue;
                         };
@@ -87,6 +89,7 @@ impl DesktopEventHooks {
         };
 
         Ok(Self {
+            _listener_thread: Arc::new(listener_thread),
             on_active_change_hook,
             on_desktops_change_hook,
         })
@@ -99,11 +102,12 @@ impl DesktopEventHooks {
         });
         event_handler(current_desktop.into());
 
-        let mut change_hook = guard_clause!(self.on_active_change_hook.lock(), error, {
+        let mut change_hook = guard_clause!(self.on_active_change_hook.try_lock(), error, {
             log::error!("Could not lock the active desktop change hook: {:?}", error);
             return;
         });
         let rx = change_hook.add_rx();
+        drop(change_hook);
 
         for event in rx {
             if let Some(event) = event {
@@ -114,6 +118,7 @@ impl DesktopEventHooks {
         }
     }
 
+    #[allow(unused)]
     pub fn on_desktops_change(&self, event_handler: impl Fn(Vec<DesktopInfo>)) {
         let desktops = guard_clause!(get_desktops(), error, {
             log::error!("Could not get desktops: {:?}", error);
@@ -121,11 +126,12 @@ impl DesktopEventHooks {
         });
         event_handler(desktops.into_iter().map(|it| it.into()).collect());
 
-        let mut change_hook = guard_clause!(self.on_desktops_change_hook.lock(), error, {
+        let mut change_hook = guard_clause!(self.on_desktops_change_hook.try_lock(), error, {
             log::error!("Could not lock the desktops change hook: {:?}", error);
             return;
         });
         let rx = change_hook.add_rx();
+        drop(change_hook);
 
         for event in rx {
             if let Some(event) = event {

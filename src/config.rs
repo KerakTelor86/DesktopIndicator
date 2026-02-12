@@ -8,6 +8,7 @@ use std::collections::HashMap;
 pub struct Settings {
     pub default_icon_path: String,
     pub desktop_name_to_icon_path: HashMap<String, String>,
+    pub desktop_index_to_icon_path: HashMap<u32, String>,
 }
 
 #[derive(Debug)]

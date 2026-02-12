@@ -1,94 +1,54 @@
 use crate::config::Settings;
-use crate::desktop::{DesktopEventHooks, DesktopInfo};
 use crate::guard_clause;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::{fs, thread};
+use std::fs;
+use std::sync::Arc;
 use trayicon::Icon;
 
 #[derive(Clone, Debug)]
 pub struct IconSelector {
-    settings: Arc<Settings>,
     default_icon: Option<Arc<Icon>>,
-    icons: Arc<Mutex<Vec<Arc<Icon>>>>,
-    name_to_index: Arc<Mutex<HashMap<String, u32>>>,
+    index_to_icon: Arc<HashMap<u32, Option<Arc<Icon>>>>,
+    name_to_icon: Arc<HashMap<String, Option<Arc<Icon>>>>,
 }
 
 impl IconSelector {
-    pub fn new(settings: Settings, desktop_event_hooks: DesktopEventHooks) -> Self {
-        let settings = Arc::new(settings);
+    pub fn new(settings: Settings) -> Self {
         let default_icon = load_icon(&settings.default_icon_path);
-        let selector = Self {
-            settings,
-            default_icon,
-            icons: Arc::new(Mutex::new(vec![])),
-            name_to_index: Arc::new(Mutex::new(HashMap::new())),
-        };
+        let index_to_icon = Arc::new(
+            settings
+                .desktop_index_to_icon_path
+                .into_iter()
+                .map(|(index, path)| (index, load_icon(&path)))
+                .collect::<HashMap<_, _>>(),
+        );
+        let name_to_icon = Arc::new(
+            settings
+                .desktop_name_to_icon_path
+                .into_iter()
+                .map(|(name, path)| (name, load_icon(&path)))
+                .collect::<HashMap<_, _>>(),
+        );
 
-        let _thread = {
-            let selector = selector.clone();
-            thread::spawn(move || {
-                desktop_event_hooks.on_desktops_change(|desktops: Vec<DesktopInfo>| {
-                    selector.build_icons(desktops);
-                })
-            })
+        let selector = Self {
+            default_icon,
+            index_to_icon,
+            name_to_icon,
         };
 
         selector
     }
 
     pub fn get_by_index(&self, index: u32) -> Option<Arc<Icon>> {
-        let icons = guard_clause!(self.icons.lock(), {
-            return None;
-        });
-        if let Some(icon) = icons.get(index as usize) {
-            Some(icon.clone())
-        } else {
-            None
-        }
+        self.index_to_icon.get(&index)?.clone()
     }
 
     pub fn get_by_name(&self, name: &str) -> Option<Arc<Icon>> {
-        let name_to_index = guard_clause!(self.name_to_index.lock(), {
-            return None;
-        });
-        if let Some(index) = name_to_index.get(name) {
-            self.get_by_index(index.clone())
-        } else {
-            None
-        }
+        self.name_to_icon.get(name)?.clone()
     }
 
     pub fn get_default(&self) -> Option<Arc<Icon>> {
         self.default_icon.clone()
-    }
-
-    fn build_icons(&self, desktops: Vec<DesktopInfo>) {
-        let mut icons = guard_clause!(self.icons.lock(), {
-            return;
-        });
-        let mut name_to_index = guard_clause!(self.name_to_index.lock(), {
-            return;
-        });
-
-        icons.clear();
-        name_to_index.clear();
-
-        let name_to_path = &self.settings.desktop_name_to_icon_path;
-
-        for desktop in &desktops {
-            let icon = name_to_path
-                .get(&desktop.name)
-                .and_then(|path| load_icon(path));
-
-            if let Some(icon) = icon {
-                name_to_index.insert(desktop.name.clone(), desktop.index);
-                while icons.len() <= desktop.index as usize {
-                    icons.push(self.get_default().unwrap_or(icon.clone()));
-                }
-                icons[desktop.index as usize] = icon;
-            }
-        }
     }
 }
 

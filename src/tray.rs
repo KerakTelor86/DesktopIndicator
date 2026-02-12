@@ -43,7 +43,7 @@ impl TrayApp {
         event_loop.set_control_flow(ControlFlow::Wait);
 
         let proxy = event_loop.create_proxy();
-        let icon_selector = IconSelector::new(settings, desktop_event_hooks.clone());
+        let icon_selector = IconSelector::new(settings);
 
         let Some(default_icon) = icon_selector.get_default() else {
             return Err(TrayAppError::MissingDefaultIcon);
@@ -78,6 +78,7 @@ impl TrayApp {
             let proxy = event_loop.create_proxy();
             thread::spawn(move || {
                 desktop_event_hooks.on_active_desktop_change(|info: DesktopInfo| {
+                    log::info!("{:?}", info);
                     if let Err(_) = proxy.send_event(Event::ActiveDesktopChanged(info)) {
                         return;
                     }
