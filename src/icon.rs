@@ -1,4 +1,5 @@
 use crate::desktop::{DesktopEventHooks, DesktopInfo};
+use crate::guard_clause;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -30,7 +31,10 @@ impl IconSelector {
     }
 
     pub fn get_by_index(&self, index: u32) -> Option<Arc<Icon>> {
-        if let Some(icon) = self.icons.lock().unwrap().get(index as usize) {
+        let icons = guard_clause!(self.icons.lock(), {
+            return None;
+        });
+        if let Some(icon) = icons.get(index as usize) {
             Some(icon.clone())
         } else {
             None
@@ -38,7 +42,10 @@ impl IconSelector {
     }
 
     pub fn get_by_name(&self, name: &str) -> Option<Arc<Icon>> {
-        if let Some(index) = self.name_to_index.lock().unwrap().get(name) {
+        let name_to_index = guard_clause!(self.name_to_index.lock(), {
+            return None;
+        });
+        if let Some(index) = name_to_index.get(name) {
             self.get_by_index(index.clone())
         } else {
             None

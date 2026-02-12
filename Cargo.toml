@@ -5,6 +5,10 @@ edition = "2024"
 
 [dependencies]
 bus = "2.4.1"
+config = { version = "0.15.19", features = ["yaml"] }
 trayicon = "0.4.0"
 winit = "0.30.12"
 winvd = "0.0.48"
+serde = { version = "1.0.228", features = ["derive"] }
+log = "0.4.29"
+simple_logger = "5.1.0"

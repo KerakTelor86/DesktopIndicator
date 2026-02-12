@@ -1,8 +1,11 @@
+use crate::config::Settings;
 use crate::desktop::{DesktopEventHooks, DesktopInfo};
+use crate::guard_clause;
 use crate::icon::IconSelector;
 use std::thread;
-use trayicon::{MenuBuilder, TrayIcon, TrayIconBuilder};
+use trayicon::{Error, MenuBuilder, TrayIcon, TrayIconBuilder};
 use winit::application::ApplicationHandler;
+use winit::error::EventLoopError;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::WindowId;
@@ -21,22 +24,40 @@ pub struct TrayApp {
     desktop_event_hooks: DesktopEventHooks,
 }
 
+#[derive(Debug)]
+pub enum TrayAppError {
+    EventLoopError(EventLoopError),
+    TrayIconBuildError(Error),
+}
+
 impl TrayApp {
-    pub fn start(desktop_event_hooks: DesktopEventHooks) {
-        let event_loop = EventLoop::<Event>::with_user_event().build().unwrap();
+    pub fn start(
+        settings: Settings,
+        desktop_event_hooks: DesktopEventHooks,
+    ) -> Result<(), TrayAppError> {
+        let event_loop = guard_clause!(EventLoop::<Event>::with_user_event().build(), error, {
+            return Err(TrayAppError::EventLoopError(error));
+        });
         event_loop.set_control_flow(ControlFlow::Wait);
 
         let proxy = event_loop.create_proxy();
-        let tray_icon = TrayIconBuilder::new()
-            .sender(move |event: &Event| {
-                proxy.send_event(event.clone()).unwrap();
-            })
-            .tooltip("DesktopIndicator")
-            .on_click(Event::LeftClick)
-            .on_double_click(Event::DoubleClick)
-            .menu(MenuBuilder::new().item("Exit", Event::Exit))
-            .build()
-            .unwrap();
+        let tray_icon = guard_clause!(
+            TrayIconBuilder::new()
+                .sender(move |event: &Event| {
+                    if let Err(error) = proxy.send_event(event.clone()) {
+                        log::error!("Failed to send event from tray icon: {}", error);
+                    }
+                })
+                .tooltip("DesktopIndicator")
+                .on_click(Event::LeftClick)
+                .on_double_click(Event::DoubleClick)
+                .menu(MenuBuilder::new().item("Exit", Event::Exit))
+                .build(),
+            error,
+            {
+                return Err(TrayAppError::TrayIconBuildError(error));
+            }
+        );
 
         let mut app = TrayApp {
             tray_icon,
@@ -48,12 +69,17 @@ impl TrayApp {
             let proxy = event_loop.create_proxy();
             thread::spawn(move || {
                 desktop_event_hooks.on_active_desktop_change(|info: DesktopInfo| {
-                    proxy.send_event(Event::ActiveDesktopChanged(info)).unwrap();
+                    if let Err(_) = proxy.send_event(Event::ActiveDesktopChanged(info)) {
+                        return;
+                    }
                 });
             })
         };
 
-        event_loop.run_app(&mut app).unwrap();
+        if let Err(error) = event_loop.run_app(&mut app) {
+            return Err(TrayAppError::EventLoopError(error));
+        };
+        Ok(())
     }
 }
 
