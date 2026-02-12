@@ -12,3 +12,4 @@ winvd = "0.0.48"
 serde = { version = "1.0.228", features = ["derive"] }
 log = "0.4.29"
 simple_logger = "5.1.0"
+dirs-next = "2.0.0"

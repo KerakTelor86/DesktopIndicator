@@ -25,9 +25,11 @@ pub struct TrayApp {
 }
 
 #[derive(Debug)]
+#[allow(unused)]
 pub enum TrayAppError {
     EventLoopError(EventLoopError),
     TrayIconBuildError(Error),
+    MissingDefaultIcon,
 }
 
 impl TrayApp {
@@ -41,6 +43,12 @@ impl TrayApp {
         event_loop.set_control_flow(ControlFlow::Wait);
 
         let proxy = event_loop.create_proxy();
+        let icon_selector = IconSelector::new(settings, desktop_event_hooks.clone());
+
+        let Some(default_icon) = icon_selector.get_default() else {
+            return Err(TrayAppError::MissingDefaultIcon);
+        };
+
         let tray_icon = guard_clause!(
             TrayIconBuilder::new()
                 .sender(move |event: &Event| {
@@ -48,6 +56,7 @@ impl TrayApp {
                         log::error!("Failed to send event from tray icon: {}", error);
                     }
                 })
+                .icon(default_icon.as_ref().clone())
                 .tooltip("DesktopIndicator")
                 .on_click(Event::LeftClick)
                 .on_double_click(Event::DoubleClick)
@@ -61,7 +70,7 @@ impl TrayApp {
 
         let mut app = TrayApp {
             tray_icon,
-            icon_selector: IconSelector::new(desktop_event_hooks.clone()),
+            icon_selector,
             desktop_event_hooks: desktop_event_hooks.clone(),
         };
 
@@ -89,14 +98,18 @@ impl ApplicationHandler<Event> for TrayApp {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: Event) {
         match event {
             Event::ActiveDesktopChanged(info) => {
-                if let Some(icon) = self.icon_selector.get_by_name(&info.name) {
-                    self.tray_icon.set_icon(icon.as_ref()).unwrap();
-                } else if let Some(icon) = self.icon_selector.get_by_index(info.index) {
-                    self.tray_icon.set_icon(icon.as_ref()).unwrap();
-                } else {
-                    self.tray_icon
-                        .set_icon(self.icon_selector.get_default().as_ref())
-                        .unwrap();
+                let Some(icon) = self
+                    .icon_selector
+                    .get_by_name(&info.name)
+                    .or(self.icon_selector.get_by_index(info.index))
+                    .or(self.icon_selector.get_default())
+                else {
+                    log::error!("Failed to select tray icon (Perhaps no default was set?)");
+                    return;
+                };
+
+                if let Err(error) = self.tray_icon.set_icon(icon.as_ref()) {
+                    log::error!("Failed to set tray icon: {}", error);
                 }
             }
             Event::LeftClick => {

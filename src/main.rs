@@ -16,7 +16,7 @@ fn main() {
     }
 
     let settings = guard_clause!(Settings::new(), error, {
-        log::error!("Error while reading settings: {}", error);
+        log::error!("Error while reading settings: {:?}", error);
         return;
     });
 

@@ -1,18 +1,39 @@
+use crate::guard_clause;
 use config::{Config, ConfigError, File};
+use dirs_next::home_dir;
 use serde::Deserialize;
 use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
 pub struct Settings {
-    default_icon_path: String,
-    desktop_name_to_icon_path: HashMap<String, String>,
+    pub default_icon_path: String,
+    pub desktop_name_to_icon_path: HashMap<String, String>,
+}
+
+#[derive(Debug)]
+#[allow(unused)]
+pub enum SettingsError {
+    ConfigError(ConfigError),
+    NoHomeDirError,
 }
 
 impl Settings {
-    pub fn new() -> Result<Self, ConfigError> {
-        let settings = Config::builder()
-            .add_source(File::with_name("%userprofile%/desktop-indicator.yaml"))
-            .build()?;
-        settings.try_deserialize()
+    pub fn new() -> Result<Self, SettingsError> {
+        let Some(home_dir) = home_dir() else {
+            return Err(SettingsError::NoHomeDirError);
+        };
+        let settings = guard_clause!(
+            Config::builder()
+                .add_source(File::from(home_dir.join("desktop-indicator.yaml")))
+                .build(),
+            error,
+            {
+                return Err(SettingsError::ConfigError(error));
+            }
+        );
+        match settings.try_deserialize() {
+            Ok(result) => Ok(result),
+            Err(error) => Err(SettingsError::ConfigError(error)),
+        }
     }
 }
