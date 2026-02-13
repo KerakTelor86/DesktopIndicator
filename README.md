@@ -1,5 +1,7 @@
 # DesktopIndicator
 
+<img width="277" height="82" alt="image" src="https://github.com/user-attachments/assets/0365c7b2-b4fa-4cfc-a9d4-a43d7d584ba5" />
+
 A lightweight Windows system tray application that displays an icon corresponding to your current virtual desktop. It also provides configurable keyboard shortcuts for switching desktops and moving windows between them.
 
 ## Features
@@ -8,6 +10,7 @@ A lightweight Windows system tray application that displays an icon correspondin
 - **Desktop switching hotkeys** — define keyboard shortcuts to jump to a specific desktop instantly.
 - **Window-move hotkeys** — move the currently focused window to another desktop, with an option to follow it automatically.
 - **Task View on click** — left-clicking the tray icon opens the Windows Task View.
+
 
 ## Requirements
 
