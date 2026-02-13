@@ -4,11 +4,20 @@ use dirs_next::home_dir;
 use serde::Deserialize;
 use std::collections::HashMap;
 
+#[derive(Eq, PartialEq, Hash, Debug, Deserialize)]
+pub struct HotKey {
+    pub modifier_keys: Vec<String>,
+    pub trigger_key: String,
+    pub target_desktop_index: u32,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Settings {
     pub default_icon_path: String,
-    pub desktop_name_to_icon_path: HashMap<String, String>,
     pub desktop_index_to_icon_path: HashMap<u32, String>,
+    pub switch_desktop_hotkeys: Vec<HotKey>,
+    pub move_window_hotkeys: Vec<HotKey>,
+    pub follow_moved_windows: bool,
 }
 
 #[derive(Debug)]

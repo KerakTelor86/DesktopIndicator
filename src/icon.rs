@@ -9,31 +9,22 @@ use trayicon::Icon;
 pub struct IconSelector {
     default_icon: Option<Arc<Icon>>,
     index_to_icon: Arc<HashMap<u32, Option<Arc<Icon>>>>,
-    name_to_icon: Arc<HashMap<String, Option<Arc<Icon>>>>,
 }
 
 impl IconSelector {
-    pub fn new(settings: Settings) -> Self {
+    pub fn new(settings: &Settings) -> Self {
         let default_icon = load_icon(&settings.default_icon_path);
         let index_to_icon = Arc::new(
             settings
                 .desktop_index_to_icon_path
-                .into_iter()
-                .map(|(index, path)| (index, load_icon(&path)))
-                .collect::<HashMap<_, _>>(),
-        );
-        let name_to_icon = Arc::new(
-            settings
-                .desktop_name_to_icon_path
-                .into_iter()
-                .map(|(name, path)| (name, load_icon(&path)))
+                .iter()
+                .map(|(index, path)| (*index, load_icon(&path)))
                 .collect::<HashMap<_, _>>(),
         );
 
         let selector = Self {
             default_icon,
             index_to_icon,
-            name_to_icon,
         };
 
         selector
@@ -41,10 +32,6 @@ impl IconSelector {
 
     pub fn get_by_index(&self, index: u32) -> Option<Arc<Icon>> {
         self.index_to_icon.get(&index)?.clone()
-    }
-
-    pub fn get_by_name(&self, name: &str) -> Option<Arc<Icon>> {
-        self.name_to_icon.get(name)?.clone()
     }
 
     pub fn get_default(&self) -> Option<Arc<Icon>> {

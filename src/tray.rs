@@ -2,6 +2,7 @@ use crate::config::Settings;
 use crate::desktop::{DesktopEventHooks, DesktopInfo};
 use crate::guard_clause;
 use crate::icon::IconSelector;
+use crate::shortcuts::{ShortcutError, ShortcutHandler};
 use std::{process, thread};
 use trayicon::{Error, MenuBuilder, TrayIcon, TrayIconBuilder};
 use winit::application::ApplicationHandler;
@@ -21,19 +22,21 @@ pub struct TrayApp {
     tray_icon: TrayIcon<Event>,
     icon_selector: IconSelector,
     desktop_event_hooks: DesktopEventHooks,
+    shortcut_handler: ShortcutHandler,
 }
 
 #[derive(Debug)]
 #[allow(unused)]
 pub enum TrayAppError {
     EventLoopError(EventLoopError),
+    ShortcutHandlerError(ShortcutError),
     TrayIconBuildError(Error),
     MissingDefaultIcon,
 }
 
 impl TrayApp {
     pub fn start(
-        settings: Settings,
+        settings: &Settings,
         desktop_event_hooks: DesktopEventHooks,
     ) -> Result<(), TrayAppError> {
         let event_loop = guard_clause!(EventLoop::<Event>::with_user_event().build(), error, {
@@ -66,17 +69,21 @@ impl TrayApp {
             }
         );
 
+        let shortcut_handler = guard_clause!(ShortcutHandler::new(settings), error, {
+            return Err(TrayAppError::ShortcutHandlerError(error));
+        });
+
         let mut app = TrayApp {
             tray_icon,
             icon_selector,
             desktop_event_hooks: desktop_event_hooks.clone(),
+            shortcut_handler,
         };
 
         let _thread = {
             let proxy = event_loop.create_proxy();
             thread::spawn(move || {
                 desktop_event_hooks.on_active_desktop_change(|info: DesktopInfo| {
-                    log::info!("{:?}", info);
                     if let Err(_) = proxy.send_event(Event::ActiveDesktopChanged(info)) {
                         return;
                     }
@@ -99,8 +106,7 @@ impl ApplicationHandler<Event> for TrayApp {
             Event::ActiveDesktopChanged(info) => {
                 let Some(icon) = self
                     .icon_selector
-                    .get_by_name(&info.name)
-                    .or(self.icon_selector.get_by_index(info.index))
+                    .get_by_index(info.index)
                     .or(self.icon_selector.get_default())
                 else {
                     log::error!("Failed to select tray icon (Perhaps no default was set?)");
@@ -121,6 +127,7 @@ impl ApplicationHandler<Event> for TrayApp {
                 };
             }
             Event::Exit => {
+                self.shortcut_handler.terminate();
                 self.desktop_event_hooks.terminate();
                 event_loop.exit();
             }
@@ -135,6 +142,7 @@ impl ApplicationHandler<Event> for TrayApp {
     ) {
         match event {
             WindowEvent::CloseRequested => {
+                self.shortcut_handler.terminate();
                 self.desktop_event_hooks.terminate();
                 event_loop.exit();
             }

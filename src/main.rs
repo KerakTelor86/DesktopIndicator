@@ -8,6 +8,7 @@ use simple_logger::SimpleLogger;
 mod config;
 mod desktop;
 mod icon;
+mod shortcuts;
 mod tray;
 mod utils;
 
@@ -27,7 +28,7 @@ fn main() {
         return;
     });
 
-    if let Err(error) = TrayApp::start(settings, desktop_event_hooks) {
+    if let Err(error) = TrayApp::start(&settings, desktop_event_hooks) {
         log::error!("Error from TrayApp: {:?}", error)
     }
 }

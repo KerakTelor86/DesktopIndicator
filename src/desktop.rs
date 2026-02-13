@@ -3,8 +3,8 @@ use bus::Bus;
 use std::sync::{Arc, Mutex};
 use std::{sync, thread};
 use winvd::{
-    get_current_desktop, get_desktops, listen_desktop_events, Desktop, DesktopEvent as WinVdEvent,
-    DesktopEventThread, Error,
+    get_current_desktop, get_desktops, listen_desktop_events, Desktop, DesktopEvent, DesktopEventThread,
+    Error,
 };
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -31,9 +31,10 @@ pub struct DesktopEventHooks {
     on_desktops_change_hook: Arc<Mutex<Bus<Option<Vec<DesktopInfo>>>>>,
 }
 
+#[allow(unused)]
 impl DesktopEventHooks {
     pub fn new() -> Result<Self, Error> {
-        let (tx, rx) = sync::mpsc::channel::<WinVdEvent>();
+        let (tx, rx) = sync::mpsc::channel::<DesktopEvent>();
         let listener_thread = listen_desktop_events(tx)?;
 
         let on_active_change_hook = Arc::new(Mutex::new(Bus::new(BUS_BUFFER_SIZE)));
@@ -41,7 +42,7 @@ impl DesktopEventHooks {
 
         let _thread = {
             let on_active_change_hook = on_active_change_hook.clone();
-            let on_desktops_change_hook_clone = on_desktops_change_hook.clone();
+            let on_desktops_change_hook = on_desktops_change_hook.clone();
 
             thread::spawn(move || {
                 for event in rx {
@@ -52,11 +53,11 @@ impl DesktopEventHooks {
                     });
 
                     if match event {
-                        WinVdEvent::DesktopCreated(_) => true,
-                        WinVdEvent::DesktopDestroyed { .. } => true,
-                        WinVdEvent::DesktopChanged { .. } => true,
-                        WinVdEvent::DesktopNameChanged(desktop, _) => desktop == current_desktop,
-                        WinVdEvent::DesktopMoved { .. } => true,
+                        DesktopEvent::DesktopCreated(_) => true,
+                        DesktopEvent::DesktopDestroyed { .. } => true,
+                        DesktopEvent::DesktopChanged { .. } => true,
+                        DesktopEvent::DesktopNameChanged(desktop, _) => desktop == current_desktop,
+                        DesktopEvent::DesktopMoved { .. } => true,
                         _ => false,
                     } {
                         let Ok(mut locked_hook) = on_active_change_hook.try_lock() else {
@@ -67,13 +68,13 @@ impl DesktopEventHooks {
                     }
 
                     if match event {
-                        WinVdEvent::DesktopCreated(_) => true,
-                        WinVdEvent::DesktopDestroyed { .. } => true,
-                        WinVdEvent::DesktopNameChanged(_, _) => true,
-                        WinVdEvent::DesktopMoved { .. } => true,
+                        DesktopEvent::DesktopCreated(_) => true,
+                        DesktopEvent::DesktopDestroyed { .. } => true,
+                        DesktopEvent::DesktopNameChanged(_, _) => true,
+                        DesktopEvent::DesktopMoved { .. } => true,
                         _ => false,
                     } {
-                        let Ok(mut locked_hook) = on_desktops_change_hook_clone.try_lock() else {
+                        let Ok(mut locked_hook) = on_desktops_change_hook.try_lock() else {
                             log::error!("Could not lock the desktop change hook");
                             continue;
                         };
@@ -118,7 +119,6 @@ impl DesktopEventHooks {
         }
     }
 
-    #[allow(unused)]
     pub fn on_desktops_change(&self, event_handler: impl Fn(Vec<DesktopInfo>)) {
         let desktops = guard_clause!(get_desktops(), error, {
             log::error!("Could not get desktops: {:?}", error);
