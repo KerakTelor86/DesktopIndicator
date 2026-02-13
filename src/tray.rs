@@ -69,9 +69,13 @@ impl TrayApp {
             }
         );
 
-        let shortcut_handler = guard_clause!(ShortcutHandler::new(settings), error, {
-            return Err(TrayAppError::ShortcutHandlerError(error));
-        });
+        let shortcut_handler = guard_clause!(
+            ShortcutHandler::new(settings, desktop_event_hooks.clone()),
+            error,
+            {
+                return Err(TrayAppError::ShortcutHandlerError(error));
+            }
+        );
 
         let mut app = TrayApp {
             tray_icon,

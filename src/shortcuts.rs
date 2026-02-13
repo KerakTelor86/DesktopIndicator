@@ -1,4 +1,5 @@
 use crate::config::{HotKey, Settings};
+use crate::desktop::DesktopEventHooks;
 use crate::guard_clause;
 use std::ffi::c_void;
 use std::str::FromStr;
@@ -6,8 +7,9 @@ use std::thread;
 use win_hotkeys::error::WHKError;
 use win_hotkeys::{HotkeyManager, InterruptHandle, VKey};
 use windows::Win32::Foundation::HWND;
-use winvd::{get_desktops, move_window_to_desktop, switch_desktop};
-use x_win::{get_active_window, WindowInfo};
+use windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
+use winvd::{get_desktops, is_window_on_current_desktop, move_window_to_desktop, switch_desktop};
+use x_win::{get_active_window, get_open_windows, WindowInfo};
 
 pub struct ShortcutHandler {
     interrupt_handle: InterruptHandle,
@@ -43,7 +45,10 @@ impl HotKey {
 }
 
 impl ShortcutHandler {
-    pub fn new(settings: &Settings) -> Result<Self, ShortcutError> {
+    pub fn new(
+        settings: &Settings,
+        desktop_event_hooks: DesktopEventHooks,
+    ) -> Result<Self, ShortcutError> {
         let mut hkm = HotkeyManager::new();
 
         let handler = Self {
@@ -128,6 +133,43 @@ impl ShortcutHandler {
                 return Err(ShortcutError::HotKeyRegistrationFailed(error));
             }
         }
+
+        // Focus first window on desktop change to fix wrong input focus after desktop switch
+        thread::spawn(move || {
+            desktop_event_hooks.on_active_desktop_change(|_| {
+                let open_windows = guard_clause!(get_open_windows(), error, {
+                    log::error!("Failed to get open windows: {:?}", error);
+                    return;
+                });
+
+                let target_window = {
+                    let window_on_desktop = open_windows.into_iter().find(|window| {
+                        // Minimized windows have negative coordinates
+                        // Full screen windows also have negative coordinates (presumably padding?)
+                        if !window.position.is_full_screen
+                            && (window.position.x <= 0 || window.position.y <= 0)
+                        {
+                            return false;
+                        }
+                        let window_handle = HWND(window.id as *mut c_void);
+                        is_window_on_current_desktop(window_handle).unwrap_or(false)
+                    });
+                    let Some(target_window) = window_on_desktop else {
+                        // Expected - Desktop probably has no open windows
+                        return;
+                    };
+                    target_window
+                };
+
+                // Weird calling semantics...
+                if unsafe { SetForegroundWindow(HWND(target_window.id as *mut c_void)).0 } == 0 {
+                    log::error!("Failed to set active window");
+                    return;
+                }
+
+                log::info!("Set active window: {:?}", target_window);
+            })
+        });
 
         thread::spawn(move || {
             hkm.event_loop();
