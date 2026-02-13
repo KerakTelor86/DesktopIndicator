@@ -4,6 +4,8 @@
 
 A lightweight Windows system tray application that displays an icon corresponding to your current virtual desktop. It also provides configurable keyboard shortcuts for switching desktops and moving windows between them.
 
+(This readme file is vibed, but I have double-checked that it is correct.)
+
 ## Features
 
 - **Tray icon per desktop** — assign a custom icon to each virtual desktop so you always know which one is active.
